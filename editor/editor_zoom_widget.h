@@ -42,10 +42,17 @@ class EditorZoomWidget : public HBoxContainer {
 	Button *zoom_plus;
 
 	float zoom = 1.0;
+
+	int zoom_order = 0;
+	int zoom_msd = 1;
+	int zoom_step = 0;
+
 	void _update_zoom_label();
 	void _button_zoom_minus();
 	void _button_zoom_reset();
 	void _button_zoom_plus();
+
+	float _calculate_zoom_by_increments();
 
 protected:
 	void _notification(int p_what);

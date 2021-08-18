@@ -77,68 +77,126 @@ void EditorZoomWidget::set_zoom(float p_zoom) {
 }
 
 void EditorZoomWidget::set_zoom_by_increments(int p_increment_count, bool p_integer_only) {
-	// Remove editor scale from the index computation.
-	const float zoom_noscale = zoom / MAX(1, EDSCALE);
+	const int order_max = 2; // 10000%
+	const int order_min = -2; //  1%
 
-	if (p_integer_only) {
-		// Only visit integer scaling factors above 100%, and fractions with an integer denominator below 100%
-		// (1/2 = 50%, 1/3 = 33.33%, 1/4 = 25%, …).
-		// This is useful when working on pixel art projects to avoid distortion.
-		// This algorithm is designed to handle fractional start zoom values correctly
-		// (e.g. 190% will zoom up to 200% and down to 100%).
-		if (zoom_noscale + p_increment_count * 0.001 >= 1.0 - CMP_EPSILON) {
-			// New zoom is certain to be above 100%.
-			if (p_increment_count >= 1) {
-				// Zooming.
-				set_zoom(Math::floor(zoom_noscale + p_increment_count) * MAX(1, EDSCALE));
-			} else {
-				// Dezooming.
-				set_zoom(Math::ceil(zoom_noscale + p_increment_count) * MAX(1, EDSCALE));
-			}
-		} else {
-			if (p_increment_count >= 1) {
-				// Zooming. Convert the current zoom into a denominator.
-				float new_zoom = 1.0 / Math::ceil(1.0 / zoom_noscale - p_increment_count);
-				if (Math::is_equal_approx(zoom_noscale, new_zoom)) {
-					// New zoom is identical to the old zoom, so try again.
-					// This can happen due to floating-point precision issues.
-					new_zoom = 1.0 / Math::ceil(1.0 / zoom_noscale - p_increment_count - 1);
-				}
-				set_zoom(new_zoom * MAX(1, EDSCALE));
-			} else {
-				// Dezooming. Convert the current zoom into a denominator.
-				float new_zoom = 1.0 / Math::floor(1.0 / zoom_noscale - p_increment_count);
-				if (Math::is_equal_approx(zoom_noscale, new_zoom)) {
-					// New zoom is identical to the old zoom, so try again.
-					// This can happen due to floating-point precision issues.
-					new_zoom = 1.0 / Math::floor(1.0 / zoom_noscale - p_increment_count + 1);
-				}
-				set_zoom(new_zoom * MAX(1, EDSCALE));
-			}
-		}
-	} else {
-		// Base increment factor defined as the twelveth root of two.
-		// This allow a smooth geometric evolution of the zoom, with the advantage of
-		// visiting all integer power of two scale factors.
-		// note: this is analogous to the 'semitones' interval in the music world
-		// In order to avoid numerical imprecisions, we compute and edit a zoom index
-		// with the following relation: zoom = 2 ^ (index / 12)
+    float new_zoom = 0;
 
-		if (zoom < CMP_EPSILON || p_increment_count == 0) {
-			return;
-		}
+	int dir = (p_increment_count > 0) ? 1 : -1;
 
-		// zoom = 2**(index/12) => log2(zoom) = index/12
-		float closest_zoom_index = Math::round(Math::log(zoom_noscale) * 12.f / Math::log(2.f));
+	while(p_increment_count)
+	{
+        p_increment_count -= dir;
 
-		float new_zoom_index = closest_zoom_index + p_increment_count;
-		float new_zoom = Math::pow(2.f, new_zoom_index / 12.f);
 
-		// Restore Editor scale transformation
-		new_zoom *= MAX(1, EDSCALE);
+        auto get_max_steps = [&]()->int
+        {
+            const int steps[] = {25, 20, 16, 10, 8, 5, 4};
+            const int n_steps = sizeof(steps)/sizeof(*steps);
+            int msd = (zoom_order >= 0) ? zoom_msd : (11 - zoom_msd);
+            return steps[CLAMP(msd, 0, n_steps-1)];
+        };
 
-		set_zoom(new_zoom);
+        int max_steps = get_max_steps();
+        if((dir == -1 && zoom_order == (order_min) && zoom_msd == 1 && zoom_step == 0))
+        {
+            new_zoom = pow(10, zoom_order);
+        }
+        else if(dir == 1 && zoom_order == order_max)
+        {
+            new_zoom = pow(10, zoom_order);
+        }
+        else
+        {
+            zoom_step += dir;
+            if(zoom_step == max_steps)
+            {
+                zoom_step = 0;
+                zoom_msd++;
+                if(zoom_msd == 10)
+                {
+                    zoom_msd = 1;   
+                    zoom_order++;
+                }
+            }
+            else if(zoom_step == -1)
+            {
+                zoom_msd--;
+                if(zoom_msd == 0)
+                {
+                    zoom_msd = 9;
+                    zoom_order--;
+                }
+                max_steps = get_max_steps();
+                zoom_step = max_steps-1;
+            }
+
+            float ord = pow(10, zoom_order);
+            new_zoom = (float)zoom_msd * (ord) + (ord * ((float)zoom_step / (float)max_steps));
+        }
 	}
+    set_zoom(new_zoom * MAX(1, EDSCALE));
+	return;
+
+	// if (p_integer_only) {
+	// 	// Only visit integer scaling factors above 100%, and fractions with an integer denominator below 100%
+	// 	// (1/2 = 50%, 1/3 = 33.33%, 1/4 = 25%, …).
+	// 	// This is useful when working on pixel art projects to avoid distortion.
+	// 	// This algorithm is designed to handle fractional start zoom values correctly
+	// 	// (e.g. 190% will zoom up to 200% and down to 100%).
+	// 	if (zoom_noscale + p_increment_count * 0.001 >= 1.0 - CMP_EPSILON) {
+	// 		// New zoom is certain to be above 100%.
+	// 		if (p_increment_count >= 1) {
+	// 			// Zooming.
+	// 			set_zoom(Math::floor(zoom_noscale + p_increment_count) * MAX(1, EDSCALE));
+	// 		} else {
+	// 			// Dezooming.
+	// 			set_zoom(Math::ceil(zoom_noscale + p_increment_count) * MAX(1, EDSCALE));
+	// 		}
+	// 	} else {
+	// 		if (p_increment_count >= 1) {
+	// 			// Zooming. Convert the current zoom into a denominator.
+	// 			float new_zoom = 1.0 / Math::ceil(1.0 / zoom_noscale - p_increment_count);
+	// 			if (Math::is_equal_approx(zoom_noscale, new_zoom)) {
+	// 				// New zoom is identical to the old zoom, so try again.
+	// 				// This can happen due to floating-point precision issues.
+	// 				new_zoom = 1.0 / Math::ceil(1.0 / zoom_noscale - p_increment_count - 1);
+	// 			}
+	// 			set_zoom(new_zoom * MAX(1, EDSCALE));
+	// 		} else {
+	// 			// Dezooming. Convert the current zoom into a denominator.
+	// 			float new_zoom = 1.0 / Math::floor(1.0 / zoom_noscale - p_increment_count);
+	// 			if (Math::is_equal_approx(zoom_noscale, new_zoom)) {
+	// 				// New zoom is identical to the old zoom, so try again.
+	// 				// This can happen due to floating-point precision issues.
+	// 				new_zoom = 1.0 / Math::floor(1.0 / zoom_noscale - p_increment_count + 1);
+	// 			}
+	// 			set_zoom(new_zoom * MAX(1, EDSCALE));
+	// 		}
+	// 	}
+	// } else {
+	// 	// Base increment factor defined as the twelveth root of two.
+	// 	// This allow a smooth geometric evolution of the zoom, with the advantage of
+	// 	// visiting all integer power of two scale factors.
+	// 	// note: this is analogous to the 'semitones' interval in the music world
+	// 	// In order to avoid numerical imprecisions, we compute and edit a zoom index
+	// 	// with the following relation: zoom = 2 ^ (index / 12)
+
+	// 	if (zoom < CMP_EPSILON || p_increment_count == 0) {
+	// 		return;
+	// 	}
+
+	// 	// zoom = 2**(index/12) => log2(zoom) = index/12
+	// 	float closest_zoom_index = Math::round(Math::log(zoom_noscale) * 12.f / Math::log(2.f));
+
+	// 	float new_zoom_index = closest_zoom_index + p_increment_count;
+	// 	float new_zoom = Math::pow(2.f, new_zoom_index / 12.f);
+
+	// 	// Restore Editor scale transformation
+	// 	new_zoom *= MAX(1, EDSCALE);
+
+	// 	set_zoom(new_zoom);
+	// }
 }
 
 void EditorZoomWidget::_notification(int p_what) {
