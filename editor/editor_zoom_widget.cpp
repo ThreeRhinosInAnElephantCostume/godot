@@ -91,9 +91,9 @@ void EditorZoomWidget::set_zoom_by_increments(int p_increment_count, bool p_inte
 
         auto get_max_steps = [&]()->int
         {
-            const int steps[] = {25, 20, 16, 10, 8, 5, 4};
+            const int steps[] = {20, 16, 10, 8, 5, 4, 2};
             const int n_steps = sizeof(steps)/sizeof(*steps);
-            int msd = (zoom_order >= 0) ? zoom_msd : (11 - zoom_msd);
+            int msd = (zoom_order >= 0) ? zoom_msd-1 : (11 - zoom_msd);
             return steps[CLAMP(msd, 0, n_steps-1)];
         };
 
